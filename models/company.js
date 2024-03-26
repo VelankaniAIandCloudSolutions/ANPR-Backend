@@ -9,7 +9,6 @@ module.exports = (sequelize, Sequelize) => {
   });
   Company.associate = (models) => {
     Company.belongsTo(models.Customer);
-    // Add other associations here if needed
   };
   return Company;
 };

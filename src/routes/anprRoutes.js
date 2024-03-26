@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
-const ordersController = require("../controllers/ordersController");
+const anprControllers = require("../controllers/anprControllers");
 
-router.get("/get-orders", ordersController.getOrders);
+router.get("/get-vehicle-visit-report", anprControllers.getVehicleVisitReport);
 
 module.exports = router;

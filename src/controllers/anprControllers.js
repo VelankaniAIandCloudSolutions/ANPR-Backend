@@ -1,114 +1,136 @@
-// const { sql, pool } = require("../configs/dbConfig");
+const db = require("../../models");
 
-// function getOrderItemsWithProduct(orderItem, callback) {
-//   const productQuery =
-//     "SELECT * FROM mas_product WHERE product_id = @product_id";
+const getVehicleVisitReport = async (req, res) => {
+  try {
+    // Extract fromDate and toDate from request query
+    const { fromDate, toDate } = req.query;
 
-//   pool
-//     .request()
-//     .input("product_id", sql.Int, orderItem.product_id)
-//     .query(productQuery, (productError, productResult) => {
-//       if (productError) {
-//         callback(productError, null);
-//       } else {
-//         const orderItemWithProduct = {
-//           ...orderItem,
-//           product: productResult.recordset[0],
-//         };
-//         callback(null, orderItemWithProduct);
-//       }
-//     });
-// }
+    // Validate dates if needed
+    // For simplicity, let's assume fromDate and toDate are in ISO date format ('YYYY-MM-DD')
 
-// function getOrdersWithItems(ordersArray, callback) {
-//   const ordersWithItemsPromises = ordersArray.map((order) => {
-//     return new Promise((resolve, reject) => {
-//       const orderItemsQuery =
-//         "SELECT * FROM order_item WHERE order_id = @input_parameter";
-//       pool
-//         .request()
-//         .input("input_parameter", sql.Int, order.order_id)
-//         .query(orderItemsQuery, (itemsError, itemsResults) => {
-//           if (itemsError) {
-//             reject(itemsError);
-//           } else {
-//             const orderItems = itemsResults.recordset;
-//             const orderItemsWithProductsPromises = orderItems.map(
-//               (orderItem) => {
-//                 return new Promise((resolveItem, rejectItem) => {
-//                   getOrderItemsWithProduct(
-//                     orderItem,
-//                     (productError, orderItemWithProduct) => {
-//                       if (productError) {
-//                         rejectItem(productError);
-//                       } else {
-//                         resolveItem(orderItemWithProduct);
-//                       }
-//                     }
-//                   );
-//                 });
-//               }
-//             );
+    // Fetch the vehicle visit records within the date range
+    const vehicleVisits = await VehicleVisit.findAll({
+      where: {
+        vehicle_id: req.params.vehicleId, // Assuming you're passing vehicleId as a URL parameter
+        visit_date: {
+          [Sequelize.Op.between]: [fromDate, toDate], // Filter by visit_date within the date range
+        },
+      },
+      order: [["visit_date", "DESC"]], // Order by visit_date in descending order
+    });
 
-//             Promise.all(orderItemsWithProductsPromises)
-//               .then((itemsWithProducts) => {
-//                 resolve({
-//                   ...order,
-//                   order_items: itemsWithProducts,
-//                 });
-//               })
-//               .catch((itemsError) => {
-//                 reject(itemsError);
-//               });
-//           }
-//         });
-//     });
-//   });
+    // You can further process the vehicleVisits data, format it, or send it directly
+    // For now, let's just send it as a JSON response
+    res.json(vehicleVisits);
+  } catch (error) {
+    // Handle errors
+    console.error("Error fetching vehicle visit report:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
 
-//   Promise.all(ordersWithItemsPromises)
-//     .then((results) => callback(null, results))
-//     .catch((error) => callback(error));
-// }
+const createGate = async (req, res) => {
+  try {
+    // Extract gate data from request body
+    const { name, gateType, companyId } = req.body;
 
-// exports.getOrders = (req, res) => {
-//   const ordersQuery = "SELECT * FROM order_info";
-//   pool.request().query(ordersQuery, (error, results) => {
-//     if (error) {
-//       console.error("Error fetching orders:", error);
-//       res.status(500).json({ error: "Internal Server Error" });
-//       return;
-//     }
+    // Check if the companyId exists
+    const company = await db.Company.findByPk(companyId);
+    if (!company) {
+      return res.status(404).json({ error: "Company not found" });
+    }
 
-//     const allOrders = results.recordset;
+    // Create the gate associated with the company
+    const gate = await db.Gate.create({
+      name,
+      gate_type: gateType,
+      CompanyId: companyId, // Assign the gate to the specified company
+    });
 
-//     getOrdersWithItems(allOrders, (error, ordersWithItems) => {
-//       if (error) {
-//         console.error("Error fetching orders with items:", error);
-//         res.status(500).json({ error: "Internal Server Error" });
-//         return;
-//       }
+    res.status(201).json(gate);
+  } catch (error) {
+    console.error("Error creating gate:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
 
-//       console.log("Orders with Items:", ordersWithItems);
+const createVehicle = async (req, res) => {
+  try {
+    const { plateNumber, vehicleType, companyId } = req.body;
 
-//       res.json({ orders: ordersWithItems });
-//     });
-//   });
-// };
+    const company = await db.Company.findByPk(companyId);
+    if (!company) {
+      return res.status(404).json({ error: "Company not found" });
+    }
 
-// //   const queryString = "SELECT * FROM order_info";
+    const vehicle = await db.Vehicle.create({
+      plate_number: plateNumber,
+      vehicle_type: vehicleType,
+      CompanyId: companyId,
+    });
 
-// //   const request = pool.request();
+    res.status(201).json(vehicle);
+  } catch (error) {
+    console.error("Error creating vehicle:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
 
-// //   request
-// //     .query(queryString)
-// //     .then((result) => {
-// //       const ordersData = result.recordset;
-// //       const responseData = {
-// //         orders: ordersData,
-// //       };
-// //       res.json(responseData);
-// //     })
-// //     .catch((error) => {
-// //       console.error("Error executing query:", error);
-// //       res.status(500).json({ error: "Internal Server Error" });
-// //     });
+const createVehicleVisit = async (req, res) => {
+  try {
+    // Extract vehicle visit data from request body
+    const { visitType, dateTime, gateId, vehicleId } = req.body;
+
+    // Check if the gateId and vehicleId exist
+    const gate = await db.Gate.findByPk(gateId);
+    const vehicle = await db.Vehicle.findByPk(vehicleId);
+    if (!gate || !vehicle) {
+      return res.status(404).json({ error: "Gate or vehicle not found" });
+    }
+
+    // Create the vehicle visit associated with the gate and vehicle
+    const vehicleVisit = await db.VehicleVisit.create({
+      visit_type: visitType,
+      date_time: dateTime,
+      GateId: gateId, // Assign the vehicle visit to the specified gate
+      VehicleId: vehicleId, // Assign the vehicle visit to the specified vehicle
+    });
+
+    res.status(201).json(vehicleVisit);
+  } catch (error) {
+    console.error("Error creating vehicle visit:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+const createVisitImage = async (req, res) => {
+  try {
+    // Extract VisitImage data from request body
+    const { imageType, imagePath, vehicleVisitId } = req.body;
+
+    // Check if the vehicleVisitId exists
+    const vehicleVisit = await db.VehicleVisit.findByPk(vehicleVisitId);
+    if (!vehicleVisit) {
+      return res.status(404).json({ error: "Vehicle Visit not found" });
+    }
+
+    // Create the VisitImage associated with the VehicleVisit
+    const visitImage = await db.VisitImage.create({
+      image_type: imageType,
+      image_path: imagePath,
+      VehicleVisitId: vehicleVisitId, // Assign the VisitImage to the specified VehicleVisit
+    });
+
+    res.status(201).json(visitImage);
+  } catch (error) {
+    console.error("Error creating VisitImage:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
+module.exports = {
+  getVehicleVisitReport,
+  createGate,
+  createVehicle,
+  createVehicleVisit,
+  createVisitImage,
+};
