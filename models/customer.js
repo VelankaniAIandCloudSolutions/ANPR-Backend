@@ -11,6 +11,10 @@ module.exports = (sequelize, Sequelize) => {
       allowNull: false,
     },
   });
-
+  Customer.associate = (models) => {
+    Customer.hasMany(models.Company, {
+      as: "companies",
+    });
+  };
   return Customer;
 };

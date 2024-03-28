@@ -14,6 +14,7 @@ module.exports = (sequelize, Sequelize) => {
 
   Gate.associate = (models) => {
     Gate.belongsTo(sequelize.models.Company);
+    Gate.hasMany(sequelize.models.VehicleVisit, { as: "vehicleVisits" });
   };
 
   return Gate;

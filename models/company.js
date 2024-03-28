@@ -9,6 +9,9 @@ module.exports = (sequelize, Sequelize) => {
   });
   Company.associate = (models) => {
     Company.belongsTo(models.Customer);
+    Company.hasMany(models.Gate, { as: "gates" });
+    Company.hasMany(models.User, { as: "users" });
+    Company.hasMany(models.Vehicle, { as: "vehicles" });
   };
   return Company;
 };

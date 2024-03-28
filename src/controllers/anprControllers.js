@@ -1,26 +1,32 @@
 const db = require("../../models");
-
+const { Sequelize } = require("sequelize");
 const getVehicleVisitReport = async (req, res) => {
   try {
-    // Extract fromDate and toDate from request query
-    const { fromDate, toDate } = req.query;
+    // const { fromDate, toDate } = req.body;
+    const fromDate = new Date("2024-03-01");
+    const toDate = new Date("2024-03-31");
 
-    // Validate dates if needed
-    // For simplicity, let's assume fromDate and toDate are in ISO date format ('YYYY-MM-DD')
-
-    // Fetch the vehicle visit records within the date range
-    const vehicleVisits = await VehicleVisit.findAll({
+    const vehicleVisits = await db.VehicleVisit.findAll({
       where: {
-        vehicle_id: req.params.vehicleId, // Assuming you're passing vehicleId as a URL parameter
-        visit_date: {
-          [Sequelize.Op.between]: [fromDate, toDate], // Filter by visit_date within the date range
+        date_time: {
+          [Sequelize.Op.between]: [fromDate, toDate],
         },
       },
-      order: [["visit_date", "DESC"]], // Order by visit_date in descending order
+      order: [["date_time", "DESC"]],
+      include: [
+        {
+          model: db.Gate,
+        },
+        {
+          model: db.Vehicle,
+        },
+        "visitImages",
+      ],
+      attributes: {
+        exclude: ["GateId", "VehicleId"], // Exclude GateId and VehicleId
+      },
     });
 
-    // You can further process the vehicleVisits data, format it, or send it directly
-    // For now, let's just send it as a JSON response
     res.json(vehicleVisits);
   } catch (error) {
     // Handle errors
@@ -31,23 +37,33 @@ const getVehicleVisitReport = async (req, res) => {
 
 const createGate = async (req, res) => {
   try {
-    // Extract gate data from request body
     const { name, gateType, companyId } = req.body;
 
-    // Check if the companyId exists
     const company = await db.Company.findByPk(companyId);
     if (!company) {
       return res.status(404).json({ error: "Company not found" });
     }
 
-    // Create the gate associated with the company
     const gate = await db.Gate.create({
       name,
       gate_type: gateType,
-      CompanyId: companyId, // Assign the gate to the specified company
+      CompanyId: companyId,
     });
 
-    res.status(201).json(gate);
+    const gateDetails = await db.Gate.findByPk(gate.id, {
+      include: [
+        {
+          model: db.Company,
+          include: [db.Customer],
+          attributes: { exclude: ["CustomerId"] },
+        },
+      ],
+      attributes: { exclude: ["CompanyId"] },
+    });
+    res.status(201).json({
+      gate: gateDetails,
+      message: "Gate created successfully",
+    });
   } catch (error) {
     console.error("Error creating gate:", error);
     res.status(500).json({ error: "Internal server error" });
@@ -88,12 +104,11 @@ const createVehicleVisit = async (req, res) => {
       return res.status(404).json({ error: "Gate or vehicle not found" });
     }
 
-    // Create the vehicle visit associated with the gate and vehicle
     const vehicleVisit = await db.VehicleVisit.create({
       visit_type: visitType,
       date_time: dateTime,
-      GateId: gateId, // Assign the vehicle visit to the specified gate
-      VehicleId: vehicleId, // Assign the vehicle visit to the specified vehicle
+      GateId: gateId,
+      VehicleId: vehicleId,
     });
 
     res.status(201).json(vehicleVisit);
@@ -105,20 +120,20 @@ const createVehicleVisit = async (req, res) => {
 
 const createVisitImage = async (req, res) => {
   try {
-    // Extract VisitImage data from request body
     const { imageType, imagePath, vehicleVisitId } = req.body;
 
-    // Check if the vehicleVisitId exists
     const vehicleVisit = await db.VehicleVisit.findByPk(vehicleVisitId);
     if (!vehicleVisit) {
       return res.status(404).json({ error: "Vehicle Visit not found" });
     }
 
-    // Create the VisitImage associated with the VehicleVisit
+    const gate = await db.Gate.findByPk(gateId, {
+      include: [{ model: db.Company }],
+    });
     const visitImage = await db.VisitImage.create({
       image_type: imageType,
       image_path: imagePath,
-      VehicleVisitId: vehicleVisitId, // Assign the VisitImage to the specified VehicleVisit
+      VehicleVisitId: vehicleVisitId,
     });
 
     res.status(201).json(visitImage);
@@ -127,10 +142,47 @@ const createVisitImage = async (req, res) => {
     res.status(500).json({ error: "Internal server error" });
   }
 };
+
+const createDetailedVehicleVisit = async (req, res) => {
+  try {
+    const { visitType, gateId, companyId, plateNumber, vehicleType } = req.body;
+
+    const gate = await db.Gate.findByPk(gateId);
+    const company = await db.Company.findByPk(companyId);
+
+    const [vehicle, created] = await db.Vehicle.findOrCreate({
+      where: { plate_number: plateNumber },
+      defaults: { vehicle_type: vehicleType, CompanyId: company.id },
+    });
+
+    const visitTypeValue = visitType ? visitType : null;
+
+    const vehicleVisit = await db.VehicleVisit.create({
+      visit_type: visitTypeValue,
+      date_time: new Date(),
+      GateId: gate.id,
+      VehicleId: vehicle.id,
+    });
+
+    const fullVehicleVisit = await db.VehicleVisit.findByPk(vehicleVisit.id, {
+      include: [db.Gate, db.Vehicle],
+    });
+
+    res.status(200).json({
+      message: "Vehicle visit created successfully",
+      vehicleVisit: fullVehicleVisit,
+    });
+  } catch (error) {
+    console.error("Error creating vehicle visit:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
+
 module.exports = {
   getVehicleVisitReport,
   createGate,
   createVehicle,
   createVehicleVisit,
   createVisitImage,
+  createDetailedVehicleVisit,
 };

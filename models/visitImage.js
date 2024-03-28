@@ -10,6 +10,10 @@ module.exports = (sequelize, Sequelize) => {
       type: DataTypes.TEXT,
       allowNull: false,
     },
+    visit_type: {
+      type: DataTypes.ENUM("entry", "exit"),
+      allowNull: true,
+    },
   });
 
   VisitImage.associate = (models) => {

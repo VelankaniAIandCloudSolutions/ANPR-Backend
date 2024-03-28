@@ -8,13 +8,22 @@ module.exports = (sequelize, Sequelize) => {
     },
     date_time: {
       type: DataTypes.DATE,
-      allowNull: false,
+      allowNull: true,
+    },
+    entry_date_time: {
+      type: DataTypes.DATE,
+      allowNull: true,
+    },
+    exit_date_time: {
+      type: DataTypes.DATE,
+      allowNull: true,
     },
   });
 
   VehicleVisit.associate = (models) => {
     VehicleVisit.belongsTo(sequelize.models.Gate);
     VehicleVisit.belongsTo(sequelize.models.Vehicle);
+    VehicleVisit.hasMany(sequelize.models.VisitImage, { as: "visitImages" });
   };
 
   return VehicleVisit;

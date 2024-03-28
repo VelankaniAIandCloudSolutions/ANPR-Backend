@@ -29,8 +29,11 @@ const createCompany = async (req, res) => {
       name,
       CustomerId: customerId,
     });
-
-    res.status(201).json(company);
+    const companyDetails = await db.Company.findByPk(company.id, {
+      include: [db.Customer],
+      attributes: { exclude: ["CustomerId"] },
+    });
+    res.status(201).json(companyDetails);
   } catch (error) {
     console.error("Error creating company:", error);
     res.status(500).json({ error: "Internal server error" });
