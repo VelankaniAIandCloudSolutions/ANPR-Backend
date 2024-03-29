@@ -14,6 +14,10 @@ module.exports = (sequelize, Sequelize) => {
       type: DataTypes.ENUM("entry", "exit"),
       allowNull: true,
     },
+    // track_id: {
+    //   type: DataTypes.STRING,
+    //   allowNull: true,
+    // },
   });
 
   VisitImage.associate = (models) => {
