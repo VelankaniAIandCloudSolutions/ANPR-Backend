@@ -40,7 +40,7 @@ const getDetailedVehicleVisitReport = async (req, res) => {
   try {
     // const { fromDate, toDate } = req.body;
     const fromDate = new Date("2024-03-01");
-    const toDate = new Date("2024-03-31");
+    const toDate = new Date("2024-04-04");
 
     const vehicleVisits = await db.VehicleVisit.findAll({
       where: {
@@ -58,13 +58,89 @@ const getDetailedVehicleVisitReport = async (req, res) => {
         },
         "visitImages",
       ],
-      attributes: {
-        exclude: ["GateId", "VehicleId"], // Exclude GateId and VehicleId
-      },
     });
-    res.json(vehicleVisits);
+    const visitsCopy = vehicleVisits;
+    combinedVisits = [];
+    for (let visit of vehicleVisits) {
+      console.log("vehicle visit", visit.vehicle);
+      combinedVisit = {};
+      if (visit.visit_type == "entry") {
+        let filteredExitVisits = vehicleVisits.filter(
+          (v) =>
+            v.visit_type == "exit" &&
+            v.VehicleId == visit.VehicleId &&
+            v.date_time > visit.date_time
+        );
+        if (filteredExitVisits.length > 0) {
+          filteredExitVisits.sort((a, b) => {
+            const dateA = new Date(a.date_time);
+            const dateB = new Date(b.date_time);
+            return dateA - dateB;
+          });
+          let next_exit_visit = filteredExitVisits[0];
+          let filteredEntryVisits = vehicleVisits.filter(
+            (v) =>
+              v.visit_type == "entry" &&
+              v.VehicleId == visit.VehicleId &&
+              v.date_time < next_exit_visit.date_time &&
+              v.date_time > visit.date_time
+          );
+          if (filteredEntryVisits.length > 0) {
+            next_exit_visit = null;
+          }
+
+          combinedVisit.vehicle = visit.Vehicle;
+          combinedVisit.entryDateTime = visit.date_time;
+          combinedVisit.exitDateTime = next_exit_visit
+            ? next_exit_visit.date_time
+            : null;
+          combinedVisit.gate = visit.Gate;
+          combinedVisit.visitImages = visit.visitImages.map(
+            (image) => image.image_url
+          );
+
+          const index1 = visitsCopy.indexOf(next_exit_visit);
+          if (index1 > -1) {
+            visitsCopy.splice(index1, 1);
+          }
+          const index2 = visitsCopy.indexOf(visit);
+          if (index2 > -1) {
+            visitsCopy.splice(index2, 1);
+          }
+
+          combinedVisits.push(combinedVisit);
+        } else {
+          console.log("else");
+          combinedVisit.vehicle = visit.Vehicle;
+          combinedVisit.entryDateTime = visit.date_time;
+          combinedVisit.exitDateTime = null;
+          combinedVisit.gate = visit.Gate;
+          combinedVisit.visitImages = visit.visitImages.map(
+            (image) => image.image_url
+          );
+          const index2 = visitsCopy.indexOf(visit);
+          if (index2 > -1) {
+            visitsCopy.splice(index2, 1);
+          }
+          combinedVisits.push(combinedVisit);
+        }
+      }
+    }
+    if (visitsCopy.length > 0) {
+      let combinedVisit = {};
+      for (let visit of visitsCopy) {
+        combinedVisit.vehicle = visit.Vehicle;
+        combinedVisit.entryDateTime = null;
+        combinedVisit.exitDateTime = visit.date_time;
+        combinedVisit.gate = visit.Gate;
+        combinedVisit.visitImages = visit.visitImages.map(
+          (image) => image.image_url
+        );
+        combinedVisits.push(combinedVisit);
+      }
+    }
+    res.json(combinedVisits);
   } catch (error) {
-    // Handle errors
     console.error("Error fetching vehicle visit report:", error);
     res.status(500).json({ error: "Internal server error" });
   }
