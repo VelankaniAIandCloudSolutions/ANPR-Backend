@@ -1,7 +1,7 @@
 {
   "development": {
-    "username": "anpr_admin",
-    "password": "password@123",
+    "username": "anpr",
+    "password": "Anpr@34062173",
     "database": "anpr",
     "host": "127.0.0.1",
     "dialect": "mysql",
