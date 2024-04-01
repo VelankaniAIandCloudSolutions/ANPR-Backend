@@ -18,10 +18,10 @@ module.exports = (sequelize, Sequelize) => {
       type: DataTypes.DATE,
       allowNull: true,
     },
-    // track_id: {
-    //   type: DataTypes.STRING,
-    //   allowNull: true,
-    // },
+    track_id: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
   });
 
   VehicleVisit.associate = (models) => {

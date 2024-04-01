@@ -1,5 +1,6 @@
 const db = require("../../models");
 const { Sequelize } = require("sequelize");
+const moment = require("moment");
 
 const getVehicleVisitReport = async (req, res) => {
   try {
@@ -36,18 +37,54 @@ const getVehicleVisitReport = async (req, res) => {
   }
 };
 
+const getFormattedDateTime = (dateTime) => {
+  return moment(dateTime).format("DD/MM/YYYY hh:mm A");
+};
+
+const calculateDurationOfStay = (entryDateTime, exitDateTime) => {
+  if (!entryDateTime || !exitDateTime) {
+    return null;
+  }
+
+  const entryMoment = moment(entryDateTime);
+  const exitMoment = moment(exitDateTime);
+  const duration = moment.duration(exitMoment.diff(entryMoment));
+
+  const hours = Math.floor(duration.asHours());
+  const minutes = Math.floor(duration.asMinutes()) % 60;
+
+  if (hours >= 1) {
+    return `${hours} hours ${minutes} minutes`;
+  } else {
+    return `${minutes} minutes`;
+  }
+};
+
 const getDetailedVehicleVisitReport = async (req, res) => {
   try {
-    // const { fromDate, toDate } = req.body;
-    const fromDate = new Date("2024-03-01");
-    const toDate = new Date("2024-04-04");
+    let whereClause = {};
+    if (req.body.fromDate && req.body.toDate) {
+      whereClause = {
+        date_time: {
+          [Sequelize.Op.between]: [req.body.fromDate, req.body.toDate],
+        },
+      };
+    } else if (req.body.fromDate) {
+      whereClause = {
+        date_time: {
+          [Sequelize.Op.gte]: req.body.fromDate,
+        },
+      };
+    } else if (req.body.toDate) {
+      whereClause = {
+        date_time: {
+          [Sequelize.Op.lte]: req.body.toDate,
+        },
+      };
+    }
 
     const vehicleVisits = await db.VehicleVisit.findAll({
-      where: {
-        date_time: {
-          [Sequelize.Op.between]: [fromDate, toDate],
-        },
-      },
+      where: whereClause,
       order: [["date_time", "DESC"]],
       include: [
         {
@@ -59,6 +96,7 @@ const getDetailedVehicleVisitReport = async (req, res) => {
         "visitImages",
       ],
     });
+
     const visitsCopy = vehicleVisits;
     combinedVisits = [];
     for (let visit of vehicleVisits) {
@@ -94,9 +132,12 @@ const getDetailedVehicleVisitReport = async (req, res) => {
           combinedVisit.exitDateTime = next_exit_visit
             ? next_exit_visit.date_time
             : null;
-          combinedVisit.gate = visit.Gate;
+          combinedVisit.entryGate = visit.Gate;
+          combinedVisit.exitGate = next_exit_visit
+            ? next_exit_visit.Gate
+            : null;
           combinedVisit.visitImages = visit.visitImages.map(
-            (image) => image.image_url
+            (image) => image.image_path
           );
 
           const index1 = visitsCopy.indexOf(next_exit_visit);
@@ -114,9 +155,11 @@ const getDetailedVehicleVisitReport = async (req, res) => {
           combinedVisit.vehicle = visit.Vehicle;
           combinedVisit.entryDateTime = visit.date_time;
           combinedVisit.exitDateTime = null;
-          combinedVisit.gate = visit.Gate;
+          combinedVisit.entryGate = visit.Gate;
+          combinedVisit.exitGate = null;
+
           combinedVisit.visitImages = visit.visitImages.map(
-            (image) => image.image_url
+            (image) => image.image_path
           );
           const index2 = visitsCopy.indexOf(visit);
           if (index2 > -1) {
@@ -132,13 +175,60 @@ const getDetailedVehicleVisitReport = async (req, res) => {
         combinedVisit.vehicle = visit.Vehicle;
         combinedVisit.entryDateTime = null;
         combinedVisit.exitDateTime = visit.date_time;
-        combinedVisit.gate = visit.Gate;
+        combinedVisit.entryGate = null;
+        combinedVisit.exitGate = visit.Gate;
         combinedVisit.visitImages = visit.visitImages.map(
-          (image) => image.image_url
+          (image) => image.image_path
         );
         combinedVisits.push(combinedVisit);
       }
     }
+    combinedVisits.forEach((visit) => {
+      visit.durationOfStay = calculateDurationOfStay(
+        visit.entryDateTime,
+        visit.exitDateTime
+      );
+    });
+    combinedVisits.forEach((visit) => {
+      if (visit.visitImages) {
+        visit.entryNumberPlateImage =
+          visit.visitImages.find(
+            (image) =>
+              image.image_type === "number_plate" &&
+              visit.visit_type === "entry"
+          )?.image_path || null;
+        visit.exitNumberPlateImage =
+          visit.visitImages.find(
+            (image) =>
+              image.image_type === "number_plate" && visit.visit_type === "exit"
+          )?.image_path || null;
+        visit.entryVehicleImage =
+          visit.visitImages.find(
+            (image) =>
+              image.image_type === "vehicle" && visit.visit_type === "entry"
+          )?.image_path || null;
+        visit.exitVehicleImage =
+          visit.visitImages.find(
+            (image) =>
+              image.image_type === "vehicle" && visit.visit_type === "exit"
+          )?.image_path || null;
+        delete visit.visitImages;
+      } else {
+        // Handle case where visit.visitImages is undefined
+        visit.entryNumberPlateImage = null;
+        visit.exitNumberPlateImage = null;
+        visit.entryVehicleImage = null;
+        visit.exitVehicleImage = null;
+      }
+    });
+    combinedVisits.forEach((visit) => {
+      visit.entryDateTime = visit.entryDateTime
+        ? getFormattedDateTime(visit.entryDateTime)
+        : null;
+      visit.exitDateTime = visit.exitDateTime
+        ? getFormattedDateTime(visit.exitDateTime)
+        : null;
+    });
     res.json(combinedVisits);
   } catch (error) {
     console.error("Error fetching vehicle visit report:", error);
@@ -227,26 +317,65 @@ const createVehicleVisit = async (req, res) => {
     res.status(500).json({ error: "Internal server error" });
   }
 };
+const AWS = require("aws-sdk");
+const multer = require("multer");
+const multerS3 = require("multer-s3");
+
+// Configure AWS SDK with your credentials and region
+AWS.config.update({
+  accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+  secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+  region: process.env.AWS_REGION,
+});
+
+// Create an S3 instance
+const s3 = new AWS.S3();
+
+// Set up multer middleware for uploading to S3
+const upload = multer({
+  storage: multerS3({
+    s3: s3,
+    bucket: process.env.S3_BUCKET_NAME,
+    acl: "public-read", // Set ACL to public-read to allow public access to the uploaded file
+    contentType: multerS3.AUTO_CONTENT_TYPE, // Automatically determine the content type of the uploaded file
+    key: function (req, file, cb) {
+      cb(null, Date.now().toString() + "-" + file.originalname); // Set the key (filename) for the uploaded file
+    },
+  }),
+});
 
 const createVisitImage = async (req, res) => {
   try {
-    const { imageType, imagePath, vehicleVisitId } = req.body;
+    const { imageType, trackId } = req.body;
 
-    const vehicleVisit = await db.VehicleVisit.findByPk(vehicleVisitId);
+    // Find the VehicleVisit by trackId
+    const vehicleVisit = await db.VehicleVisit.findOne({
+      where: { track_id: trackId },
+    });
+
     if (!vehicleVisit) {
       return res.status(404).json({ error: "Vehicle Visit not found" });
     }
 
-    const gate = await db.Gate.findByPk(gateId, {
-      include: [{ model: db.Company }],
-    });
-    const visitImage = await db.VisitImage.create({
-      image_type: imageType,
-      image_path: imagePath,
-      VehicleVisitId: vehicleVisitId,
-    });
+    // Proceed with uploading the file to S3 using multer middleware
+    upload.single("image")(req, res, async function (err) {
+      if (err) {
+        console.error("Error uploading file to S3:", err);
+        return res.status(500).json({ error: "Failed to upload file to S3" });
+      }
 
-    res.status(201).json(visitImage);
+      // If file upload to S3 was successful, get the S3 URL from req.file.location
+      const imagePath = req.file.location;
+
+      // Create VisitImage with the provided information
+      const visitImage = await db.VisitImage.create({
+        image_type: imageType,
+        image_path: imagePath,
+        VehicleVisitId: vehicleVisit.id, // Use vehicleVisit.id instead of vehicleVisitId
+      });
+
+      res.status(201).json(visitImage);
+    });
   } catch (error) {
     console.error("Error creating VisitImage:", error);
     res.status(500).json({ error: "Internal server error" });
@@ -255,9 +384,9 @@ const createVisitImage = async (req, res) => {
 
 const createDetailedVehicleVisit = async (req, res) => {
   try {
-    const { dateTime, gateId, companyId, plateNumber, vehicleType } = req.body;
-    // const parsedDateTime = new Date(dateTime);
-    const parsedDateTime = new Date();
+    const { dateTime, gateId, companyId, plateNumber, vehicleType, trackId } =
+      req.body;
+    const parsedDateTime = dateTime ? new Date(dateTime) : new Date();
     const gate = await db.Gate.findByPk(gateId);
     const company = await db.Company.findByPk(companyId);
 
@@ -279,6 +408,7 @@ const createDetailedVehicleVisit = async (req, res) => {
       date_time: parsedDateTime,
       GateId: gate.id,
       VehicleId: vehicle.id,
+      track_id: trackId,
     });
 
     const fullVehicleVisit = await db.VehicleVisit.findByPk(vehicleVisit.id, {
