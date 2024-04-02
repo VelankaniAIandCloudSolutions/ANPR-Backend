@@ -93,14 +93,20 @@ const getDetailedVehicleVisitReport = async (req, res) => {
         {
           model: db.Vehicle,
         },
-        "visitImages",
+        {
+          model: db.VisitImage,
+          as: "visitImages",
+          include: [
+            {
+              model: db.VehicleVisit,
+            },
+          ],
+        },
       ],
     });
-
     const visitsCopy = vehicleVisits;
     combinedVisits = [];
     for (let visit of vehicleVisits) {
-      console.log("vehicle visit", visit.vehicle);
       combinedVisit = {};
       if (visit.visit_type == "entry") {
         let filteredExitVisits = vehicleVisits.filter(
@@ -136,9 +142,7 @@ const getDetailedVehicleVisitReport = async (req, res) => {
           combinedVisit.exitGate = next_exit_visit
             ? next_exit_visit.Gate
             : null;
-          combinedVisit.visitImages = visit.visitImages.map(
-            (image) => image.image_path
-          );
+          combinedVisit.visitImages = visit.visitImages;
 
           const index1 = visitsCopy.indexOf(next_exit_visit);
           if (index1 > -1) {
@@ -151,16 +155,13 @@ const getDetailedVehicleVisitReport = async (req, res) => {
 
           combinedVisits.push(combinedVisit);
         } else {
-          console.log("else");
           combinedVisit.vehicle = visit.Vehicle;
           combinedVisit.entryDateTime = visit.date_time;
           combinedVisit.exitDateTime = null;
           combinedVisit.entryGate = visit.Gate;
           combinedVisit.exitGate = null;
 
-          combinedVisit.visitImages = visit.visitImages.map(
-            (image) => image.image_path
-          );
+          combinedVisit.visitImages = visit.visitImages;
           const index2 = visitsCopy.indexOf(visit);
           if (index2 > -1) {
             visitsCopy.splice(index2, 1);
@@ -177,9 +178,7 @@ const getDetailedVehicleVisitReport = async (req, res) => {
         combinedVisit.exitDateTime = visit.date_time;
         combinedVisit.entryGate = null;
         combinedVisit.exitGate = visit.Gate;
-        combinedVisit.visitImages = visit.visitImages.map(
-          (image) => image.image_path
-        );
+        combinedVisit.visitImages = visit.visitImages;
         combinedVisits.push(combinedVisit);
       }
     }
@@ -189,30 +188,33 @@ const getDetailedVehicleVisitReport = async (req, res) => {
         visit.exitDateTime
       );
     });
+
+    console.log("combined visits s");
+    console.log(combinedVisits[0].visitImages);
     combinedVisits.forEach((visit) => {
       if (visit.visitImages) {
         visit.entryNumberPlateImage =
           visit.visitImages.find(
             (image) =>
               image.image_type === "number_plate" &&
-              visit.visit_type === "entry"
+              image.visit_type === "entry"
           )?.image_path || null;
         visit.exitNumberPlateImage =
           visit.visitImages.find(
             (image) =>
-              image.image_type === "number_plate" && visit.visit_type === "exit"
+              image.image_type === "number_plate" && image.visit_type === "exit"
           )?.image_path || null;
         visit.entryVehicleImage =
           visit.visitImages.find(
             (image) =>
-              image.image_type === "vehicle" && visit.visit_type === "entry"
+              image.image_type === "vehicle" && image.visit_type === "entry"
           )?.image_path || null;
         visit.exitVehicleImage =
           visit.visitImages.find(
             (image) =>
-              image.image_type === "vehicle" && visit.visit_type === "exit"
+              image.image_type === "vehicle" && image.visit_type === "exit"
           )?.image_path || null;
-        delete visit.visitImages;
+        // delete visit.visitImages;
       } else {
         // Handle case where visit.visitImages is undefined
         visit.entryNumberPlateImage = null;
@@ -317,70 +319,33 @@ const createVehicleVisit = async (req, res) => {
     res.status(500).json({ error: "Internal server error" });
   }
 };
-// const AWS = require("aws-sdk");
-// const multer = require("multer");
-// const multerS3 = require("multer-s3");
 
-// // Configure AWS SDK with your credentials and region
-// AWS.config.update({
-//   accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-//   secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-//   region: process.env.AWS_REGION,
-// });
+const createVisitImage = async (req, res) => {
+  try {
+    const { imageType, trackId } = req.body;
+    const s3Url = req.file.location;
+    const vehicleVisit = await db.VehicleVisit.findOne({
+      where: { track_id: trackId },
+    });
 
-// // Create an S3 instance
-// const s3 = new AWS.S3();
+    if (!vehicleVisit) {
+      return res.status(404).json({ error: "Vehicle Visit not found" });
+    }
 
-// // Set up multer middleware for uploading to S3
-// const upload = multer({
-//   storage: multerS3({
-//     s3: s3,
-//     bucket: process.env.S3_BUCKET_NAME,
-//     acl: "public-read", // Set ACL to public-read to allow public access to the uploaded file
-//     contentType: multerS3.AUTO_CONTENT_TYPE, // Automatically determine the content type of the uploaded file
-//     key: function (req, file, cb) {
-//       cb(null, Date.now().toString() + "-" + file.originalname); // Set the key (filename) for the uploaded file
-//     },
-//   }),
-// });
+    const visitImage = await db.VisitImage.create({
+      image_type: imageType,
+      image_path: s3Url,
+      VehicleVisitId: vehicleVisit.id,
+      track_id: trackId,
+      visit_type: vehicleVisit.visit_type,
+    });
 
-// const createVisitImage = async (req, res) => {
-//   try {
-//     const { imageType, trackId } = req.body;
-
-//     // Find the VehicleVisit by trackId
-//     const vehicleVisit = await db.VehicleVisit.findOne({
-//       where: { track_id: trackId },
-//     });
-
-//     if (!vehicleVisit) {
-//       return res.status(404).json({ error: "Vehicle Visit not found" });
-//     }
-
-//     // Proceed with uploading the file to S3 using multer middleware
-//     upload.single("image")(req, res, async function (err) {
-//       if (err) {
-//         console.error("Error uploading file to S3:", err);
-//         return res.status(500).json({ error: "Failed to upload file to S3" });
-//       }
-
-//       // If file upload to S3 was successful, get the S3 URL from req.file.location
-//       const imagePath = req.file.location;
-
-//       // Create VisitImage with the provided information
-//       const visitImage = await db.VisitImage.create({
-//         image_type: imageType,
-//         image_path: imagePath,
-//         VehicleVisitId: vehicleVisit.id, // Use vehicleVisit.id instead of vehicleVisitId
-//       });
-
-//       res.status(201).json(visitImage);
-//     });
-//   } catch (error) {
-//     console.error("Error creating VisitImage:", error);
-//     res.status(500).json({ error: "Internal server error" });
-//   }
-// };
+    res.status(201).json(visitImage);
+  } catch (error) {
+    console.error("Error creating VisitImage:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
 
 const createDetailedVehicleVisit = async (req, res) => {
   try {
@@ -430,7 +395,7 @@ module.exports = {
   createGate,
   createVehicle,
   createVehicleVisit,
-  // createVisitImage,
+  createVisitImage,
   createDetailedVehicleVisit,
   getDetailedVehicleVisitReport,
 };

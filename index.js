@@ -1,3 +1,4 @@
+require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const app = express();
@@ -21,7 +22,6 @@ sequelize
 app.use(cors());
 app.use(bodyParser.urlencoded({ extended: false }));
 app.use(bodyParser.json());
-app.use(upload.none());
 
 app.get("/", (req, res) => {
   res.json({ message: "ok" });
