@@ -189,8 +189,6 @@ const getDetailedVehicleVisitReport = async (req, res) => {
       );
     });
 
-    console.log("combined visits s");
-    console.log(combinedVisits[0].visitImages);
     combinedVisits.forEach((visit) => {
       if (visit.visitImages) {
         visit.entryNumberPlateImage =
@@ -365,7 +363,10 @@ const createDetailedVehicleVisit = async (req, res) => {
 
     const [vehicle, created] = await db.Vehicle.findOrCreate({
       where: { plate_number: plateNumber },
-      defaults: { vehicle_type: vehicleType, CompanyId: company.id },
+      defaults: {
+        vehicle_type: vehicleType ? vehicleType : null,
+        CompanyId: company.id,
+      },
     });
 
     const vehicleVisit = await db.VehicleVisit.create({
