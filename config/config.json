@@ -16,10 +16,10 @@
     "timezone": "+05:30"
   },
   "production": {
-    "username": "root",
-    "password": null,
-    "database": "database_production",
-    "host": "127.0.0.1",
+    "username": "anpr_admin",
+    "password": "anpr34062173",
+    "database": "anpr",
+    "host": "anpr-prod.c6wmerccfdgz.ap-south-1.rds.amazonaws.com",
     "dialect": "mysql",
     "timezone": "+05:30"
 
