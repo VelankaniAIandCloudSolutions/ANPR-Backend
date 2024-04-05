@@ -1,6 +1,7 @@
 const { S3Client } = require("@aws-sdk/client-s3");
 const multer = require("multer");
 const multerS3 = require("multer-s3");
+
 const s3 = new S3Client({
   region: process.env.AWS_REGION, // Set the region from environment variable
   credentials: {
@@ -8,6 +9,14 @@ const s3 = new S3Client({
     secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY, // Set secret access key from environment variable
   },
 });
+
+const generateUniqueFilename = (file) => {
+  const timestamp = Date.now();
+  const randomString = Math.random().toString(36).substring(2, 15);
+  const originalname = file.originalname;
+  const filename = `${timestamp}-${randomString}-${originalname}`;
+  return filename;
+};
 
 const upload = multer({
   storage: multerS3({
@@ -17,7 +26,8 @@ const upload = multer({
       cb(null, { fieldName: file.fieldname });
     },
     key: function (req, file, cb) {
-      cb(null, file.originalname);
+      const filename = generateUniqueFilename(file);
+      cb(null, filename);
     },
   }),
 });
