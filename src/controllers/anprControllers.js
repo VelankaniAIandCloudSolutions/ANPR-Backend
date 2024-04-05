@@ -143,7 +143,9 @@ const getDetailedVehicleVisitReport = async (req, res) => {
             ? next_exit_visit.Gate
             : null;
           combinedVisit.visitImages = visit.visitImages;
-          combinedVisit.visitImages.push(...next_exit_visit.visitImages);
+          if (next_exit_visit && next_exit_visit.visitImages) {
+            combinedVisit.visitImages.push(...next_exit_visit.visitImages);
+          }
           const index1 = visitsCopy.indexOf(next_exit_visit);
           if (index1 > -1) {
             visitsCopy.splice(index1, 1);
