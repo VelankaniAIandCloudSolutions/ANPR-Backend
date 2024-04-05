@@ -38,7 +38,8 @@ const getVehicleVisitReport = async (req, res) => {
 };
 
 const getFormattedDateTime = (dateTime) => {
-  return moment(dateTime).format("DD/MM/YYYY hh:mm A");
+  // return moment(dateTime).format("DD/MM/YYYY hh:mm A");
+  return moment(dateTime, "DD/MM/YYYY hh:mm A").format("DD/MM/YYYY hh:mm A");
 };
 
 const calculateDurationOfStay = (entryDateTime, exitDateTime) => {
